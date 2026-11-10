@@ -150,6 +150,9 @@ applyTheme(store.get('code-share.theme', 'solarized dark'));
 // Trailing comments are left out of the measure: they wrap instead of shrinking the code.
 const MIN_FONT_PX = 11;
 const MAX_FONT_PX = 28;
+// Full fit makes short snippets huge and wraps a lot; land halfway between a natural size and the fit.
+const NATURAL_FONT_PX = 14;
+const FIT_WEIGHT = 0.5;
 let fontPx = 16;
 let fitQueued = false;
 
@@ -171,8 +174,9 @@ function fitFont() {
   const charRatio = editor.defaultCharWidth() / fontPx;
   const gutter = editor.getGutterElement().offsetWidth;
   const available = editor.getWrapperElement().clientWidth - gutter - 16;
-  const best = Math.floor(available / (longestLineChars() * charRatio));
-  const next = Math.min(MAX_FONT_PX, Math.max(MIN_FONT_PX, best));
+  const fit = available / (longestLineChars() * charRatio);
+  const blended = Math.floor(NATURAL_FONT_PX + (fit - NATURAL_FONT_PX) * FIT_WEIGHT);
+  const next = Math.min(MAX_FONT_PX, Math.max(MIN_FONT_PX, blended));
   if (next === fontPx) return;
   fontPx = next;
   editor.getWrapperElement().style.fontSize = fontPx + 'px';
