@@ -4,40 +4,42 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>code-share</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232b2b2b'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' font-weight='bold' fill='%23cc7832' text-anchor='middle'%3E%7B%7D%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/solarized.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/darcula.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/idea.min.css">
 <style>
-  :root { --bg: #212121; --bar: #1a1a1a; --fg: #eeeeee; --muted: #9e9e9e; --accent: #82aaff; }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font: 14px system-ui, sans-serif; }
-  body { display: flex; flex-direction: column; height: 100dvh; }
-  header { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); background: var(--bar); }
-  header strong { margin-right: auto; }
-  select, button { min-height: 36px; background: #2c2c2c; color: var(--fg); border: 1px solid #444; border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
-  button:hover, select:hover { border-color: var(--accent); }
-  #status { color: var(--muted); font-size: 12px; min-width: 70px; text-align: right; }
-  #status.live { color: #c3e88d; }
+  html, body { height: 100%; margin: 0; font: 13px system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; height: 100dvh; background: var(--editor-bg, #2b2b2b); color: var(--editor-fg, #a9b7c6); }
+  /* A slim strip in the editor's own colours, so a shared link reads as just the code. */
+  #bar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 6px 12px; padding-top: max(6px, env(safe-area-inset-top)); }
+  .host { display: none; }
+  body.is-host .host { display: inline-block; }
+  #bar button.host { background: none; color: inherit; opacity: .7; border: 1px solid currentColor; border-radius: 12px; padding: 2px 10px; font: inherit; cursor: pointer; }
+  #bar button.host:hover { opacity: 1; }
+  #themes { display: flex; gap: 8px; }
+  .ball { width: 16px; height: 16px; border-radius: 50%; padding: 0; cursor: pointer; border: 2px solid transparent; }
+  .ball[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 2px; }
+  #status { width: 8px; height: 8px; border-radius: 50%; background: #888; }
+  #status.live { background: #6a8759; }
+  #status.down { background: #c75450; }
   main { flex: 1; min-height: 0; padding-bottom: env(safe-area-inset-bottom); }
   .CodeMirror { height: 100%; font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; line-height: 1.5; }
-  @media (max-width: 600px) {
-    header { gap: 6px; padding: 6px 10px; }
-    header strong { width: 100%; }
-    select, button { flex: 1; }
-    #status { flex-basis: 100%; text-align: left; min-width: 0; }
-  }
 </style>
 </head>
 <body>
-<header>
-  <strong>code-share</strong>
-  <select id="lang" aria-label="Language">
-    <option value="text/x-scala">Scala</option>
-    <option value="text/x-haskell">Haskell</option>
-  </select>
-  <button id="new">New</button>
-  <button id="copy">Copy link</button>
-  <span id="status">connecting…</span>
-</header>
+<div id="bar">
+  <button class="host" id="new">New</button>
+  <button class="host" id="copy">Copy link</button>
+  <div id="themes">
+    <button class="ball" data-theme="solarized dark" title="Scastie" aria-label="Scastie theme" style="background:#002b36;border-color:#859900"></button>
+    <button class="ball" data-theme="darcula" title="IntelliJ Darcula" aria-label="IntelliJ Darcula theme" style="background:#2b2b2b;border-color:#cc7832"></button>
+    <button class="ball" data-theme="idea" title="IntelliJ Light" aria-label="IntelliJ Light theme" style="background:#ffffff;border-color:#000080"></button>
+  </div>
+  <span id="status" title="connecting"></span>
+</div>
 <main><textarea id="code"></textarea></main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
@@ -49,18 +51,31 @@
 const DB = 'https://signaling-dcfad-default-rtdb.europe-west1.firebasedatabase.app/code-share/snippets';
 const MAX_CHARS = 100000;
 const WRITE_DELAY_MS = 120;
+const LANGS = { scala: 'text/x-scala', haskell: 'text/x-haskell' };
 const clientId = Math.random().toString(36).slice(2);
 
 const randomId = () => Math.random().toString(36).slice(2, 10);
 const validId = id => /^[a-z0-9]{4,32}$/.test(id);
 
+// Per-browser memory: the theme picked and the snippets this browser created (it is their host).
+const store = {
+  get(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
+  set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} },
+};
+const hosted = new Set(store.get('code-share.hosted', []));
+function markHosted(id) { hosted.add(id); store.set('code-share.hosted', [...hosted].slice(-200)); }
+
 let snippetId = location.hash.slice(1);
-if (!validId(snippetId)) { snippetId = randomId(); history.replaceState(null, '', '#' + snippetId); }
+if (!validId(snippetId)) {
+  snippetId = randomId();
+  markHosted(snippetId);
+  history.replaceState(null, '', location.search + '#' + snippetId);
+}
+const langParam = LANGS[new URLSearchParams(location.search).get('lang')];
 
 const status = document.getElementById('status');
-const lang = document.getElementById('lang');
 const editor = CodeMirror.fromTextArea(document.getElementById('code'), {
-  mode: 'text/x-scala', theme: 'material-darker', lineNumbers: true,
+  mode: langParam || LANGS.scala, theme: 'darcula', lineNumbers: true,
   indentUnit: 2, tabSize: 2, autofocus: true,
 });
 
@@ -68,7 +83,8 @@ let applyingRemote = false;
 let writeTimer = null;
 let stream = null;
 
-function setStatus(text, live) { status.textContent = text; status.classList.toggle('live', !!live); }
+function setStatus(state, title) { status.className = state; status.title = title; }
+function updateHostControls() { document.body.classList.toggle('is-host', hosted.has(snippetId)); }
 
 function save() {
   clearTimeout(writeTimer);
@@ -76,16 +92,17 @@ function save() {
     const code = editor.getValue().slice(0, MAX_CHARS);
     fetch(`${DB}/${snippetId}.json`, {
       method: 'PUT',
-      body: JSON.stringify({ code, lang: lang.value, by: clientId, at: { '.sv': 'timestamp' } }),
-    }).then(r => setStatus(r.ok ? 'saved' : 'save failed', r.ok))
-      .catch(() => setStatus('offline'));
+      body: JSON.stringify({ code, lang: editor.getOption('mode'), by: clientId, at: { '.sv': 'timestamp' } }),
+    }).then(r => setStatus(r.ok ? 'live' : 'down', r.ok ? 'saved' : 'save failed'))
+      .catch(() => setStatus('down', 'offline'));
   }, WRITE_DELAY_MS);
 }
 
 function applyRemote(snippet) {
   if (!snippet || snippet.by === clientId) return;
   applyingRemote = true;
-  if (snippet.lang && snippet.lang !== lang.value) { lang.value = snippet.lang; editor.setOption('mode', snippet.lang); }
+  const mode = langParam || snippet.lang;
+  if (mode && mode !== editor.getOption('mode')) editor.setOption('mode', mode);
   if (typeof snippet.code === 'string' && snippet.code !== editor.getValue()) {
     const cursor = editor.getCursor();
     const scroll = editor.getScrollInfo();
@@ -102,11 +119,23 @@ function listen() {
   stream.addEventListener('put', e => {
     const { path, data } = JSON.parse(e.data);
     if (path === '/') applyRemote(data);
-    setStatus('live', true);
+    setStatus('live', 'live');
   });
-  stream.addEventListener('patch', () => setStatus('live', true));
-  stream.onerror = () => setStatus('reconnecting…');
+  stream.addEventListener('patch', () => setStatus('live', 'live'));
+  stream.onerror = () => setStatus('down', 'reconnecting');
 }
+
+// Themes: the coloured balls; the page around the editor takes the editor's colours.
+function applyTheme(theme) {
+  editor.setOption('theme', theme);
+  const styles = getComputedStyle(editor.getWrapperElement());
+  document.body.style.setProperty('--editor-bg', styles.backgroundColor);
+  document.body.style.setProperty('--editor-fg', styles.color);
+  for (const ball of document.querySelectorAll('.ball')) ball.setAttribute('aria-pressed', ball.dataset.theme === theme);
+  store.set('code-share.theme', theme);
+}
+for (const ball of document.querySelectorAll('.ball')) ball.addEventListener('click', () => applyTheme(ball.dataset.theme));
+applyTheme(store.get('code-share.theme', 'solarized dark'));
 
 // Font fit: the largest size at which the longest line still fits the editor width.
 const MIN_FONT_PX = 11;
@@ -149,24 +178,28 @@ window.addEventListener('resize', queueFit);
 queueFit();
 
 editor.on('change', () => { if (!applyingRemote) save(); });
-lang.addEventListener('change', () => { editor.setOption('mode', lang.value); save(); });
 
+// Host-only buttons: shown on snippets this browser created.
 document.getElementById('new').addEventListener('click', () => {
-  location.hash = randomId();
+  const id = randomId();
+  markHosted(id);
+  location.hash = id;
 });
 document.getElementById('copy').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(location.href); setStatus('link copied', true); }
+  try { await navigator.clipboard.writeText(location.href); setStatus('live', 'link copied'); }
   catch { prompt('Copy this link:', location.href); }
 });
 window.addEventListener('hashchange', () => {
   const id = location.hash.slice(1);
   if (!validId(id) || id === snippetId) return;
   snippetId = id;
+  updateHostControls();
   applyingRemote = true; editor.setValue(''); applyingRemote = false;
-  setStatus('connecting…');
+  setStatus('', 'connecting');
   listen();
 });
 
+updateHostControls();
 listen();
 </script>
 </body>
