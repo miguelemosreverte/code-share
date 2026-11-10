@@ -8,7 +8,7 @@ A tiny live code-sharing page for Scala and Haskell snippets.
 - A shared link shows only the code. **New** and **Copy link** appear only in the browser that created the snippet.
 - Scala by default; add `?lang=haskell` to the link for Haskell (e.g. `.../code-share/?lang=haskell#abc123`).
 - The coloured balls switch theme: Scastie (Solarized Dark), IntelliJ Darcula, IntelliJ Light. The choice is remembered per browser.
-- No sideways scrolling: the font grows to the largest size (11–28 px) at which the longest line's code fits the screen. Trailing comments don't count, they wrap instead; wrapped lines hang under their indentation.
+- No sideways scrolling: the font is sized so 80 columns fill the screen (10–18 px). On a phone held upright the 10 px floor shows about 55–60 columns and longer lines wrap, hanging under their indentation.
 - No login, no build step: one `index.html` with CodeMirror for highlighting and the Firebase Realtime Database REST API for sync (Server-Sent Events in, debounced `PUT` out).
 
 Snippets are stored at `/code-share/snippets/<id>` and are public: anyone with the link can read and edit them. If two people type at the same moment, the last write wins.

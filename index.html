@@ -146,37 +146,21 @@ function applyTheme(theme) {
 for (const ball of document.querySelectorAll('.ball')) ball.addEventListener('click', () => applyTheme(ball.dataset.theme));
 applyTheme(store.get('code-share.theme', 'solarized dark'));
 
-// Font fit: the largest size at which the longest line's code still fits the editor width.
-// Trailing comments are left out of the measure: they wrap instead of shrinking the code.
-const MIN_FONT_PX = 11;
-const MAX_FONT_PX = 28;
-// Full fit makes short snippets huge and wraps a lot; land halfway between a natural size and the fit.
-const NATURAL_FONT_PX = 14;
-const FIT_WEIGHT = 0.5;
+// Font fit: the size at which the standard 80 columns fill the editor width.
+// Phones can't show 80 columns readably, so the floor wins there and longer lines wrap.
+const TARGET_COLUMNS = 80;
+const MIN_FONT_PX = 10;
+const MAX_FONT_PX = 18;
 let fontPx = 16;
 let fitQueued = false;
-
-function codeColumns(lineNo) {
-  const tokens = editor.getLineTokens(lineNo, true);
-  while (tokens.length && (tokens[tokens.length - 1].type === 'comment' || !tokens[tokens.length - 1].string.trim())) tokens.pop();
-  const end = tokens.length ? tokens[tokens.length - 1].end : 0;
-  return CodeMirror.countColumn(editor.getLine(lineNo).slice(0, end), null, editor.getOption('tabSize'));
-}
-
-function longestLineChars() {
-  let longest = 0;
-  for (let n = 0; n < editor.lineCount(); n++) longest = Math.max(longest, codeColumns(n));
-  return Math.max(longest, 20);
-}
 
 function fitFont() {
   fitQueued = false;
   const charRatio = editor.defaultCharWidth() / fontPx;
   const gutter = editor.getGutterElement().offsetWidth;
   const available = editor.getWrapperElement().clientWidth - gutter - 16;
-  const fit = available / (longestLineChars() * charRatio);
-  const blended = Math.floor(NATURAL_FONT_PX + (fit - NATURAL_FONT_PX) * FIT_WEIGHT);
-  const next = Math.min(MAX_FONT_PX, Math.max(MIN_FONT_PX, blended));
+  const fit = Math.floor(available / (TARGET_COLUMNS * charRatio));
+  const next = Math.min(MAX_FONT_PX, Math.max(MIN_FONT_PX, fit));
   if (next === fontPx) return;
   fontPx = next;
   editor.getWrapperElement().style.fontSize = fontPx + 'px';
