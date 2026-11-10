@@ -76,7 +76,16 @@ const langParam = LANGS[new URLSearchParams(location.search).get('lang')];
 const status = document.getElementById('status');
 const editor = CodeMirror.fromTextArea(document.getElementById('code'), {
   mode: langParam || LANGS.scala, theme: 'darcula', lineNumbers: true,
-  indentUnit: 2, tabSize: 2, autofocus: true,
+  indentUnit: 2, tabSize: 2, autofocus: true, lineWrapping: true,
+});
+
+// Wrapped continuation lines hang under their line's indentation, plus two columns.
+const HANG_COLUMNS = 2;
+editor.on('renderLine', (cm, line, elt) => {
+  const indent = CodeMirror.countColumn(line.text.match(/^\s*/)[0], null, cm.getOption('tabSize'));
+  const offset = (indent + HANG_COLUMNS) * cm.defaultCharWidth();
+  elt.style.textIndent = `-${offset}px`;
+  elt.style.paddingLeft = `${4 + offset}px`;
 });
 
 let applyingRemote = false;
@@ -137,18 +146,23 @@ function applyTheme(theme) {
 for (const ball of document.querySelectorAll('.ball')) ball.addEventListener('click', () => applyTheme(ball.dataset.theme));
 applyTheme(store.get('code-share.theme', 'solarized dark'));
 
-// Font fit: the largest size at which the longest line still fits the editor width.
+// Font fit: the largest size at which the longest line's code still fits the editor width.
+// Trailing comments are left out of the measure: they wrap instead of shrinking the code.
 const MIN_FONT_PX = 11;
 const MAX_FONT_PX = 28;
 let fontPx = 16;
 let fitQueued = false;
 
+function codeColumns(lineNo) {
+  const tokens = editor.getLineTokens(lineNo, true);
+  while (tokens.length && (tokens[tokens.length - 1].type === 'comment' || !tokens[tokens.length - 1].string.trim())) tokens.pop();
+  const end = tokens.length ? tokens[tokens.length - 1].end : 0;
+  return CodeMirror.countColumn(editor.getLine(lineNo).slice(0, end), null, editor.getOption('tabSize'));
+}
+
 function longestLineChars() {
   let longest = 0;
-  editor.eachLine(line => {
-    const width = line.text.replace(/\t/g, ' '.repeat(editor.getOption('tabSize'))).length;
-    if (width > longest) longest = width;
-  });
+  for (let n = 0; n < editor.lineCount(); n++) longest = Math.max(longest, codeColumns(n));
   return Math.max(longest, 20);
 }
 
